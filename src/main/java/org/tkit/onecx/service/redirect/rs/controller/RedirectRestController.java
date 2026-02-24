@@ -4,9 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Comparator;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -19,6 +17,7 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 
 import org.tkit.onecx.service.redirect.rs.RedirectConfig;
+import org.tkit.onecx.service.redirect.rs.RedirectUtils;
 
 import io.quarkus.logging.Log;
 import io.quarkus.qute.Engine;
@@ -44,7 +43,7 @@ public class RedirectRestController {
 
     @GET
     @Produces(MediaType.TEXT_HTML)
-    public Response redirectIncomingRequest(@Context UriInfo uriInfo) throws IOException {
+    public Response redirectIncomingRequest(@Context UriInfo uriInfo) {
         String fullPath = uriInfo.getRequestUri().toString();
 
         Map<String, RedirectConfig.ClientRule> clientRules = redirectConfig.urlRewriteRules().entrySet().stream()
@@ -93,24 +92,10 @@ public class RedirectRestController {
         }
 
         // Sort rules by their numeric index key and serialize to a JSON array for the template
-        String rulesJson = clientRules.entrySet().stream()
-                .sorted(Comparator.comparing(e -> {
-                    try {
-                        return Integer.parseInt(e.getKey());
-                    } catch (NumberFormatException ex) {
-                        return Integer.MAX_VALUE;
-                    }
-                }))
-                .map(e -> "{\"pattern\":" + jsonString(e.getValue().pattern())
-                        + ",\"replacePattern\":" + jsonString(e.getValue().replacePattern()) + "}")
-                .collect(Collectors.joining(",", "[", "]"));
+        String rulesJson = RedirectUtils.rulesToJson(clientRules);
 
         return Response
                 .ok(tpl.data("rules", new RawString(rulesJson)).render())
                 .build();
-    }
-
-    private static String jsonString(String value) {
-        return "\"" + value.replace("\"", "\\\"") + "\"";
     }
 }

@@ -6,27 +6,17 @@
     <script>
         try {
             const fullUrl = window.location.href;
-            console.log("Redirect service evaluating:", fullUrl);
-
-            let redirected = false;
             for (const rule of rules) {
                 const regex = new RegExp(rule.pattern);
                 const match = fullUrl.match(regex);
-                console.log("Trying pattern:", rule.pattern, "| match:", match);
                 if (match && match.groups) {
                     let newUrl = rule.replacePattern;
                     for (const [key, value] of Object.entries(match.groups)) {
                         newUrl = newUrl.replace("($" + key + ")", value);
                     }
-                    console.log("Rule matched. Redirecting to:", newUrl);
                     window.location.href = newUrl;
-                    redirected = true;
                     break;
                 }
-            }
-
-            if (!redirected) {
-                console.warn("No redirect rule matched for:", fullUrl);
             }
         } catch (e) {
             console.error("Redirect failed:", e);
