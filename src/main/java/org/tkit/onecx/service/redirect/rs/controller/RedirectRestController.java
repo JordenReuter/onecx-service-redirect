@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -45,7 +47,7 @@ public class RedirectRestController {
     public Response redirectIncomingRequest(@Context UriInfo uriInfo) throws IOException {
         String fullPath = uriInfo.getRequestUri().toString();
 
-        RedirectConfig.RewriteRule rule = redirectConfig.urlRewriteRules().entrySet().stream()
+        Map<String, RedirectConfig.ClientRule> clientRules = redirectConfig.urlRewriteRules().entrySet().stream()
                 .filter(entry -> fullPath.matches(entry.getKey()))
                 .max((e1, e2) -> {
                     // Prefer the more specific pattern (longer pattern = more specific)
@@ -58,8 +60,8 @@ public class RedirectRestController {
 
         Template tpl = redirectTemplate;
 
-        // if no matching rule is found, use fallback template
-        if (rule == null) {
+        // if no matching rule group is found, use fallback template
+        if (clientRules == null) {
             tpl = fallbackTemplate;
 
             // use custom fallback template if provided
@@ -90,9 +92,25 @@ public class RedirectRestController {
             }
         }
 
+        // Sort rules by their numeric index key and serialize to a JSON array for the template
+        String rulesJson = clientRules.entrySet().stream()
+                .sorted(Comparator.comparing(e -> {
+                    try {
+                        return Integer.parseInt(e.getKey());
+                    } catch (NumberFormatException ex) {
+                        return Integer.MAX_VALUE;
+                    }
+                }))
+                .map(e -> "{\"pattern\":" + jsonString(e.getValue().pattern())
+                        + ",\"replacePattern\":" + jsonString(e.getValue().replacePattern()) + "}")
+                .collect(Collectors.joining(",", "[", "]"));
+
         return Response
-                .ok(tpl.data("p1", new RawString(rule.pattern()), "p2", new RawString(rule.replacePattern())).render())
+                .ok(tpl.data("rules", new RawString(rulesJson)).render())
                 .build();
     }
 
+    private static String jsonString(String value) {
+        return "\"" + value.replace("\"", "\\\"") + "\"";
+    }
 }

@@ -18,10 +18,13 @@ import io.smallrye.config.WithName;
 public interface RedirectConfig {
 
     /**
-     * Url Redirect Rules
+     * Url Redirect Rules.
+     * The outer map key is a server-side regex matched against the incoming request URL.
+     * The inner map key is an integer index (e.g. "0", "1", "2") defining the priority order
+     * in which the client-side patterns are tried. Lower index = higher priority.
      */
     @WithName("url-rewrite-rules")
-    Map<String, RewriteRule> urlRewriteRules();
+    Map<String, Map<String, ClientRule>> urlRewriteRules();
 
     /**
      * File path to custom redirect template
@@ -36,18 +39,19 @@ public interface RedirectConfig {
     Optional<String> customFallbackTemplatePath();
 
     /**
-     * Url Redirect Rule
+     * A single client-side rewrite rule (pattern + replacement).
+     * Multiple rules per URL group are tried in index order by the browser.
      */
-    interface RewriteRule {
+    interface ClientRule {
 
         /**
-         * Pattern to match an incoming request
+         * Regex pattern tested against window.location.href (including fragment) in the browser.
          */
         @WithName("pattern")
         String pattern();
 
         /**
-         * Replace-pattern to rewrite the incoming request
+         * Replace-pattern to rewrite the URL. Use ($groupName) to reference named capture groups.
          */
         @WithName("replace-pattern")
         String replacePattern();

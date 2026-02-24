@@ -15,7 +15,7 @@ endif::add-copy-button-to-config-props[]
 
 [.description]
 --
-Pattern to match an incoming request
+Regex pattern tested against window.location.href (including fragment) in the browser.
 
 
 ifdef::add-copy-button-to-env-var[]
@@ -36,7 +36,7 @@ endif::add-copy-button-to-config-props[]
 
 [.description]
 --
-Replace-pattern to rewrite the incoming request
+Replace-pattern to rewrite the URL. Use ($groupName) to reference named capture groups.
 
 
 ifdef::add-copy-button-to-env-var[]
