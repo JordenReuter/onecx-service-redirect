@@ -4,10 +4,10 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import jakarta.enterprise.context.ApplicationScoped;
-
-@ApplicationScoped
 public class RedirectUtils {
+
+    private RedirectUtils() {
+    }
 
     /**
      * Sorts the given client rules by their numeric index key and serializes them

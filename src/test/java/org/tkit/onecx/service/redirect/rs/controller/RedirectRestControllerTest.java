@@ -94,7 +94,7 @@ class RedirectRestControllerTest {
     }
 
     @Test
-    void usesFallbackWhenNoRuleMatchesAndCustomTemplateFailed() throws IOException {
+    void usesFallbackWhenNoRuleMatchesAndCustomTemplateFailed() {
         Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of());
         Mockito.when(redirectConfig.customFallbackTemplatePath()).thenReturn(Optional.of("not/existing/path.html"));
 
@@ -205,8 +205,24 @@ class RedirectRestControllerTest {
                 .statusCode(OK.getStatusCode())
                 .extract().asString();
 
-        assertThat(body).contains("/workorder/($woId)");
-        assertThat(body).contains("/testorder/($orderId)");
-        assertThat(body).contains("/overview");
+        assertThat(body).contains("/workorder/($woId)").contains("/testorder/($orderId)").contains("/overview");
     }
+
+    @Test
+    void appliesRuleWithNonNumericKeyWithoutThrowing() {
+        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
+                ".*non-numeric.*", Map.of(
+                        "not-a-number", clientRule(".*non-numeric.*", "/some/path"))));
+        Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.empty());
+
+        var body = given()
+                .accept(TEXT_HTML)
+                .get("/non-numeric/page")
+                .then()
+                .statusCode(OK.getStatusCode())
+                .extract().asString();
+
+        assertThat(body).contains("/some/path");
+    }
+
 }
