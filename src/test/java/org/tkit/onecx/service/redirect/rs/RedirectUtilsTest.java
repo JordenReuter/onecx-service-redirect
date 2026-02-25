@@ -64,8 +64,7 @@ class RedirectUtilsTest {
 
         String json = RedirectUtils.rulesToJson(rules);
 
-        assertThat(json).startsWith("[").endsWith("]");
-        assertThat(json).contains("pattern-foo").contains("pattern-bar");
+        assertThat(json).startsWith("[").endsWith("]").contains("pattern-foo").contains("pattern-bar");
     }
 
     @Test
