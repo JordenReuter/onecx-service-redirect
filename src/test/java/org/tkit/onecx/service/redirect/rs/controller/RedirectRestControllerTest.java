@@ -46,6 +46,20 @@ class RedirectRestControllerTest {
         }
     }
 
+    private static RedirectConfig.ClientRule clientRule(String pattern, String replacePattern) {
+        return new RedirectConfig.ClientRule() {
+            @Override
+            public String pattern() {
+                return pattern;
+            }
+
+            @Override
+            public String replacePattern() {
+                return replacePattern;
+            }
+        };
+    }
+
     @Test
     void usesFallbackWhenNoRuleMatches() {
         Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of());
@@ -75,14 +89,12 @@ class RedirectRestControllerTest {
                 .then()
                 .statusCode(OK.getStatusCode())
                 .extract().asString();
+
         assertThat(body).contains("custom").contains("some/unknown/path");
     }
 
     @Test
-    void usesFallbackWhenNoRuleMatchesAndCustomTemplateFailed() throws IOException {
-        Path tmp = Files.createTempFile("tpl", ".html");
-        Files.writeString(tmp, "custom {reqPath}", StandardCharsets.UTF_8);
-
+    void usesFallbackWhenNoRuleMatchesAndCustomTemplateFailed() {
         Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of());
         Mockito.when(redirectConfig.customFallbackTemplatePath()).thenReturn(Optional.of("not/existing/path.html"));
 
@@ -98,31 +110,13 @@ class RedirectRestControllerTest {
 
     @Test
     void appliesBestMatchingRule() {
-        var ruleMap = new HashMap<String, RedirectConfig.RewriteRule>();
+        var ruleMap = new HashMap<String, Map<String, RedirectConfig.ClientRule>>();
 
-        ruleMap.put(".*test-ui.*", new RedirectConfig.RewriteRule() {
-            @Override
-            public String pattern() {
-                return ".*test-ui.*";
-            }
+        ruleMap.put(".*test-ui.*", Map.of(
+                "0", clientRule(".*test-ui.*", "/new/path")));
 
-            @Override
-            public String replacePattern() {
-                return "/new/path";
-            }
-        });
-
-        ruleMap.put(".*test-ui/subTest.*", new RedirectConfig.RewriteRule() {
-            @Override
-            public String pattern() {
-                return ".*test-ui/subTest.*";
-            }
-
-            @Override
-            public String replacePattern() {
-                return "/new/path/subTest";
-            }
-        });
+        ruleMap.put(".*test-ui/subTest.*", Map.of(
+                "0", clientRule(".*test-ui/subTest.*", "/new/path/subTest")));
 
         Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(ruleMap);
         Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.empty());
@@ -139,17 +133,9 @@ class RedirectRestControllerTest {
 
     @Test
     void appliesDefaultTemplateWhenRuleMatches() {
-        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(".*test-ui.*", new RedirectConfig.RewriteRule() {
-            @Override
-            public String pattern() {
-                return ".*test-ui.*";
-            }
-
-            @Override
-            public String replacePattern() {
-                return "/new/path";
-            }
-        }));
+        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
+                ".*test-ui.*", Map.of(
+                        "0", clientRule(".*test-ui.*", "/new/path"))));
         Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.empty());
 
         var body = given()
@@ -166,19 +152,11 @@ class RedirectRestControllerTest {
     @Test
     void usesCustomTemplateWhenConfigured() throws IOException {
         Path tmp = Files.createTempFile("tpl", ".html");
-        Files.writeString(tmp, "custom {p1}-{p2}", StandardCharsets.UTF_8);
+        Files.writeString(tmp, "custom {rules}", StandardCharsets.UTF_8);
 
-        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(".*custom-test.*", new RedirectConfig.RewriteRule() {
-            @Override
-            public String pattern() {
-                return ".*custom-test.*";
-            }
-
-            @Override
-            public String replacePattern() {
-                return "/custom/replaced";
-            }
-        }));
+        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
+                ".*custom-test.*", Map.of(
+                        "0", clientRule(".*custom-test.*", "/custom/replaced"))));
         Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.of(tmp.toString()));
 
         var body = given()
@@ -195,17 +173,9 @@ class RedirectRestControllerTest {
 
     @Test
     void continuesWithDefaultTemplateWhenCustomTemplateFails() {
-        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(".*fallback-test.*", new RedirectConfig.RewriteRule() {
-            @Override
-            public String pattern() {
-                return ".*fallback-test.*";
-            }
-
-            @Override
-            public String replacePattern() {
-                return "/fallback/replaced";
-            }
-        }));
+        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
+                ".*fallback-test.*", Map.of(
+                        "0", clientRule(".*fallback-test.*", "/fallback/replaced"))));
         Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.of("/non/existing/path.html"));
 
         var body = given()
@@ -218,4 +188,41 @@ class RedirectRestControllerTest {
         assertThat(body).contains(".*fallback-test.*");
         assertThat(body).contains("/fallback/replaced");
     }
+
+    @Test
+    void appliesMultipleClientRulesInOrder() {
+        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
+                ".*multi-rule.*", Map.of(
+                        "0", clientRule(".*multi-rule.*#/task/(?<woId>.+)", "/workorder/($woId)"),
+                        "1", clientRule(".*multi-rule.*#/testOrder/(?<orderId>.+)", "/testorder/($orderId)"),
+                        "2", clientRule(".*multi-rule.*", "/overview"))));
+        Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.empty());
+
+        var body = given()
+                .accept(TEXT_HTML)
+                .get("/multi-rule/page")
+                .then()
+                .statusCode(OK.getStatusCode())
+                .extract().asString();
+
+        assertThat(body).contains("/workorder/($woId)").contains("/testorder/($orderId)").contains("/overview");
+    }
+
+    @Test
+    void appliesRuleWithNonNumericKeyWithoutThrowing() {
+        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
+                ".*non-numeric.*", Map.of(
+                        "not-a-number", clientRule(".*non-numeric.*", "/some/path"))));
+        Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.empty());
+
+        var body = given()
+                .accept(TEXT_HTML)
+                .get("/non-numeric/page")
+                .then()
+                .statusCode(OK.getStatusCode())
+                .extract().asString();
+
+        assertThat(body).contains("/some/path");
+    }
+
 }

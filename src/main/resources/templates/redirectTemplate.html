@@ -1,29 +1,25 @@
 <html>
 <head>
     <script>
-        let pattern = "{p1}";
-        let replacePattern = "{p2}";
+        const rules = {rules};
     </script>
     <script>
-          try {
+        try {
             const fullUrl = window.location.href;
-            const regex = new RegExp(pattern);
-            const match = fullUrl.match(regex);
-            console.log(fullUrl);
-            console.log(match);
-
-            if (match && match.groups) {
-              let newUrl = replacePattern;
-
-            for (const [key, value] of Object.entries(match.groups)) {
-              newUrl = newUrl.replace("($" + key + ")", value);
+            for (const rule of rules) {
+                const regex = new RegExp(rule.pattern);
+                const match = fullUrl.match(regex);
+                if (match && match.groups) {
+                    let newUrl = rule.replacePattern;
+                    for (const [key, value] of Object.entries(match.groups)) {
+                        newUrl = newUrl.replace("($" + key + ")", value);
+                    }
+                    window.location.href = newUrl;
+                    break;
+                }
             }
-            console.log("Redirecting to:", newUrl);
-            window.location.href = newUrl;
-          }
-
         } catch (e) {
-          console.error("Redirect failed:", e);
+            console.error("Redirect failed:", e);
         }
     </script>
     <noscript>
