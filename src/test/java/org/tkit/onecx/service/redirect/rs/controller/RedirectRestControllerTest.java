@@ -222,8 +222,7 @@ class RedirectRestControllerTest {
                 .statusCode(OK.getStatusCode())
                 .extract().asString();
 
-        assertThat(body).contains("\"pattern\":\"old\"");
-        assertThat(body).contains("\"replacePattern\":\"new\"");
+        assertThat(body).contains("\"pattern\":\"old\"").contains("\"replacePattern\":\"new\"");
     }
 
     @Test
