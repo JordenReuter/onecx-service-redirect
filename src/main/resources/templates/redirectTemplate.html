@@ -9,10 +9,12 @@
             for (const rule of rules) {
                 const regex = new RegExp(rule.pattern);
                 const match = fullUrl.match(regex);
-                if (match && match.groups) {
+                if (match) {
                     let newUrl = rule.replacePattern;
-                    for (const [key, value] of Object.entries(match.groups)) {
-                        newUrl = newUrl.replace("($" + key + ")", value);
+                    if (match.groups) {
+                        for (const [key, value] of Object.entries(match.groups)) {
+                            newUrl = newUrl.replace("($" + key + ")", value);
+                        }
                     }
                     window.location.href = newUrl;
                     break;
