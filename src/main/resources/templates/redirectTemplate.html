@@ -10,19 +10,23 @@
                 const regex = new RegExp(rule.pattern);
                 const match = fullUrl.match(regex);
                 if (match) {
-                    let newUrl = rule.replacePattern;
-                    if (match.groups) {
+                    let url;
+                    if (match.groups && Object.keys(match.groups).length > 0) {
+                        url = rule.replacePattern;
                         for (const [key, value] of Object.entries(match.groups)) {
-                            newUrl = newUrl.replace("($" + key + ")", value);
+                            url = url.replace('($' + key + ')', value);
                         }
+                    } else {
+                        url = fullUrl.replace(regex, rule.replacePattern);
                     }
-                    window.location.href = newUrl;
-                    break;
+                    return url;
                 }
             }
-        } catch (e) {
-            console.error("Redirect failed:", e);
+        } catch (err) {
+            console.error('Redirect rule evaluation failed:', err);
         }
+        return null;
+    }
     </script>
     <noscript>
         <p>You need to enable JavaScript!</p>
