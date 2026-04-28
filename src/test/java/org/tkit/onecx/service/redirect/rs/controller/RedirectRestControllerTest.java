@@ -209,6 +209,23 @@ class RedirectRestControllerTest {
     }
 
     @Test
+    void appliesSimpleRuleWithoutNamedGroups() {
+        Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
+                ".*test-ui.*", Map.of(
+                        "0", clientRule("old", "new"))));
+        Mockito.when(redirectConfig.customRedirectTemplatePath()).thenReturn(Optional.empty());
+
+        var body = given()
+                .accept(TEXT_HTML)
+                .get("/test-ui/old")
+                .then()
+                .statusCode(OK.getStatusCode())
+                .extract().asString();
+
+        assertThat(body).contains("\"pattern\":\"old\"").contains("\"replacePattern\":\"new\"");
+    }
+
+    @Test
     void appliesRuleWithNonNumericKeyWithoutThrowing() {
         Mockito.when(redirectConfig.urlRewriteRules()).thenReturn(Map.of(
                 ".*non-numeric.*", Map.of(
