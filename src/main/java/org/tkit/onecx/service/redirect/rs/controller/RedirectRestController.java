@@ -46,56 +46,90 @@ public class RedirectRestController {
     public Response redirectIncomingRequest(@Context UriInfo uriInfo) {
         String fullPath = uriInfo.getRequestUri().toString();
 
-        Map<String, RedirectConfig.ClientRule> clientRules = redirectConfig.urlRewriteRules().entrySet().stream()
+        RedirectConfig.RuleConfig ruleConfig = redirectConfig.rules();
+        RedirectConfig.RuleMode rulesMode = ruleConfig.mode();
+        int redirectWaitSeconds = ruleConfig.redirectWaitSeconds();
+
+        RedirectConfig.HostForwardRule matchedHostForwardRule = findMatchedHostForwardRule(uriInfo.getRequestUri().getHost());
+        Map<String, RedirectConfig.ClientRule> clientRules = findMatchedClientRules(fullPath, rulesMode,
+                matchedHostForwardRule);
+
+        // If neither host nor path rules matched, use fallback template
+        if (matchedHostForwardRule == null && clientRules.isEmpty()) {
+            return Response.ok(loadFallbackTemplate().data("reqPath", fullPath).render()).build();
+        }
+
+        Template tpl = loadRedirectTemplate();
+
+        // Pass host-forward rule and path rules to the template.
+        String rulesJson = clientRules.isEmpty() ? "[]" : RedirectUtils.rulesToJson(clientRules);
+
+        io.quarkus.qute.TemplateInstance instance = tpl
+                .data("hostForwardRule", matchedHostForwardRule)
+                .data("rules", new RawString(rulesJson))
+                .data("redirectWaitSeconds", redirectWaitSeconds);
+
+        return Response.ok(instance.render()).build();
+    }
+
+    private RedirectConfig.HostForwardRule findMatchedHostForwardRule(String host) {
+        return redirectConfig.hostForwardRules().values().stream()
+                .filter(rule -> host.matches(rule.hostPattern()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Map<String, RedirectConfig.ClientRule> findMatchedClientRules(String fullPath,
+            RedirectConfig.RuleMode rulesMode,
+            RedirectConfig.HostForwardRule matchedHostForwardRule) {
+        if (rulesMode == RedirectConfig.RuleMode.SEPARATE && matchedHostForwardRule != null) {
+            return Map.of();
+        }
+
+        return redirectConfig.urlRewriteRules().entrySet().stream()
                 .filter(entry -> fullPath.matches(entry.getKey()))
                 .max((e1, e2) -> {
-                    // Prefer the more specific pattern (longer pattern = more specific)
                     int matchLength1 = e1.getKey().replace("\\.\\*", "").length();
                     int matchLength2 = e2.getKey().replace("\\.\\*", "").length();
                     return Integer.compare(matchLength1, matchLength2);
                 })
                 .map(Map.Entry::getValue)
-                .orElse(null);
+                .orElse(Map.of());
+    }
 
-        Template tpl = redirectTemplate;
-
-        // if no matching rule group is found, use fallback template
-        if (clientRules == null) {
-            tpl = fallbackTemplate;
-
-            // use custom fallback template if provided
-            if (redirectConfig.customFallbackTemplatePath().isPresent()) {
-                try {
-                    String content = Files.readString(Paths.get(redirectConfig.customFallbackTemplatePath().get()),
-                            StandardCharsets.UTF_8);
-                    tpl = engine.parse(content);
-                } catch (IOException e) {
-                    Log.error(
-                            "Failed to load custom fallback template from path: " + redirectConfig.customFallbackTemplatePath(),
-                            e);
-                }
-            }
-
-            return Response.ok(tpl.data("reqPath", fullPath).render()).build();
+    private Template loadFallbackTemplate() {
+        if (redirectConfig.customFallbackTemplatePath().isPresent()) {
+            return parseTemplateFromPath(redirectConfig.customFallbackTemplatePath().get(), fallbackTemplate,
+                    "Failed to load custom fallback template from path: " + redirectConfig.customFallbackTemplatePath());
         }
+        return fallbackTemplate;
+    }
 
-        // use custom redirect template if provided
+    private Template loadRedirectTemplate() {
         if (redirectConfig.customRedirectTemplatePath().isPresent()) {
-            try {
-                String content = Files.readString(Paths.get(redirectConfig.customRedirectTemplatePath().get()),
-                        StandardCharsets.UTF_8);
-                tpl = engine.parse(content);
-            } catch (IOException e) {
-                Log.error("Failed to load custom redirect template from path: " + redirectConfig.customRedirectTemplatePath(),
-                        e);
-            }
+            return parseTemplateFromPath(redirectConfig.customRedirectTemplatePath().get(), redirectTemplate,
+                    "Failed to load custom redirect template from path: " + redirectConfig.customRedirectTemplatePath());
         }
 
-        // Sort rules by their numeric index key and serialize to a JSON array for the template
-        String rulesJson = RedirectUtils.rulesToJson(clientRules);
+        if (redirectConfig.bundledRedirectTemplateName().isPresent()) {
+            String templateName = redirectConfig.bundledRedirectTemplateName().get();
+            Template bundledTemplate = engine.getTemplate(templateName);
+            if (bundledTemplate != null) {
+                return bundledTemplate;
+            }
+            Log.warn("Bundled redirect template not found: " + templateName + ", using default redirectTemplate");
+        }
 
-        return Response
-                .ok(tpl.data("rules", new RawString(rulesJson)).render())
-                .build();
+        return redirectTemplate;
+    }
+
+    private Template parseTemplateFromPath(String templatePath, Template defaultTemplate, String errorMessage) {
+        try {
+            String content = Files.readString(Paths.get(templatePath), StandardCharsets.UTF_8);
+            return engine.parse(content);
+        } catch (IOException e) {
+            Log.error(errorMessage, e);
+            return defaultTemplate;
+        }
     }
 }
